@@ -9,7 +9,9 @@
 #include "gsl/gsl_rng.h"
 #include "sim_params.hh"
 #include "matlib.hh"
+#ifndef HIT_USE_FFTW
 #include "hit_lowk.hh"
+#endif
 #include "hit_fftw.hh"
 
 using namespace OBJECT_DICT;
@@ -145,7 +147,9 @@ class sim_manager {
     /** Maximum velocity in the simulation, used in CFL calculation */
     double vmax;
     /** low-k HIT model for MVP spectral-style forcing */
+#ifndef HIT_USE_FFTW
     hit_lowk_model hit_model;
+#endif
     hit_fftw_backend hit_fft;
     bool hit_use_fft;
 

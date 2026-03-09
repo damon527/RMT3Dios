@@ -3,7 +3,7 @@
 #include <algorithm>
 
 sim_manager::~sim_manager() {
-	for (int i = 0; i < n_obj; i++) delete objs[i];
+    for (int i = 0; i < n_obj; i++) delete objs[i];
     if (avg_velx != NULL) delete[] avg_velx;
     if (avg_vely != NULL) delete[] avg_vely;
     if (avg_velz != NULL) delete[] avg_velz;
@@ -12,38 +12,38 @@ sim_manager::~sim_manager() {
     if (avg_y != NULL) delete[] avg_y;
     if (avg_z != NULL) delete[] avg_z;
     if (avg_N != NULL) delete[] avg_N;
-	if (objs != NULL) delete[] objs;
-    if(sm_array!=NULL) delete [] sm_array;
+    if (objs != NULL) delete[] objs;
+    if (sm_array != NULL) delete[] sm_array;
 }
 
 double sim_manager::cfl(double dx) {
 
-	// the minimum time scale allowed by shear wave of the solid
-	double xxsp3 = 3.0/(dx*dx);
-	double dt_s = 100000;
-	for (int i = 0; i < n_obj; i++) {
-		double odt = sm_array[i].cfl(dx);
-		if (odt < dt_s) dt_s = odt;
-	}
-	// the time scale set by fluid viscosity
-	double dt_f = 0.5* fm.rho/(fm.mu*xxsp3)*fm.dt_pad;
+    // the minimum time scale allowed by shear wave of the solid
+    double xxsp3 = 3.0/(dx*dx);
+    double dt_s = 100000;
+    for (int i = 0; i < n_obj; i++) {
+        double odt = sm_array[i].cfl(dx);
+        if (odt < dt_s) dt_s = odt;
+    }
+    // the time scale set by fluid viscosity
+    double dt_f = 0.5* fm.rho/(fm.mu*xxsp3)*fm.dt_pad;
 
-	return (dt_s<dt_f)?dt_s:dt_f;
+    return (dt_s<dt_f)?dt_s:dt_f;
 }
 
 /** Set up
  * CFL max dt and transition zone width.
  */
 void sim_manager::setup_const(){
-	double dh=spars->min_dh();
-	// max dt allowed by cfl condition
-	dt_reg = cfl(dh);
-	// transition zone widht
-	eps = wt_n*dh;
-	eps_inv = 1./eps;
-	tf1 =0.5/eps;
-	tf2 =0.5/M_PI;
-	tf3 =M_PI/eps;
+    double dh=spars->min_dh();
+    // max dt allowed by cfl condition
+    dt_reg = cfl(dh);
+    // transition zone width
+    eps = wt_n*dh;
+    eps_inv = 1./eps;
+    tf1 =0.5/eps;
+    tf2 =0.5/M_PI;
+    tf3 =M_PI/eps;
 
     // User provided time step could be smaller
     if(spars->dt < dt_reg) dt_reg = spars->dt;
@@ -54,67 +54,97 @@ void sim_manager::setup_const(){
 
 /** This is to check for advective CFL condition after fluid velocity has been initialized */
 void sim_manager::obligatory_cfl_recheck(){
-        double dh=spars->min_dh();
-        double dt_min = fm.dt_pad*dh/vmax;
-        if(dt_reg>dt_min) {
-            dt_reg = dt_min;
-            // User provided time step could be smaller
-            if(spars->dt < dt_reg) dt_reg = spars->dt;
-        }
-        // Set the anchoring acceleration
-        K_stiff = 0.0025/(dt_reg*dt_reg);
+    double dh=spars->min_dh();
+    double dt_min = fm.dt_pad*dh/vmax;
+    if(dt_reg>dt_min) {
+        dt_reg = dt_min;
+        // User provided time step could be smaller
+        if(spars->dt < dt_reg) dt_reg = spars->dt;
+    }
+    // Set the anchoring acceleration
+    K_stiff = 0.0025/(dt_reg*dt_reg);
 }
 
 void sim_manager::setup_hit_model(){
-    hit_energy_total = hit_energy_low = hit_energy_high = 0;
-    hit_var[0] = hit_var[1] = hit_var[2] = 0;
-    hit_div_l2 = 0;
-    hit_div_phys_l2 = 0;
-    hit_alpha = 1;
-    hit_forcing_l2 = 0;
+    hit_energy_total = 0.0;
+    hit_energy_low = 0.0;
+    hit_energy_high = 0.0;
+    hit_var[0] = hit_var[1] = hit_var[2] = 0.0;
+    hit_div_l2 = 0.0;
+    hit_div_phys_l2 = 0.0;
+    hit_alpha = 1.0;
+    hit_forcing_l2 = 0.0;
     hit_fft_forward_calls = 0;
     hit_fft_inverse_calls = 0;
     hit_shell_E.clear();
-    hit_target_error = 0;
+    hit_target_error = 0.0;
+
+    hit_use_fft = false;
+    hit_fft.enabled = false;
+
+#ifndef HIT_USE_FFTW
+    hit_model.enabled = false;
+#endif
 
     if(!spars->hit_enable) {
-        hit_model.enabled = false;
         return;
     }
+
     if(!(x_prd && y_prd && z_prd)) {
-        hit_model.enabled = false;
         return;
     }
 
     double target = spars->hit_target_energy;
-    if(target <= 0 && spars->hit_target_urms > 0) target = 1.5*spars->hit_target_urms*spars->hit_target_urms;
+    if(target <= 0.0 && spars->hit_target_urms > 0.0) {
+        target = 1.5 * spars->hit_target_urms * spars->hit_target_urms;
+    }
 
     // compatibility with vel_profile type 4 amplitude
     double *vpp = spars->vel_profile;
     for(int i=0;i<spars->vel_prof_num;i++) {
         int vtype = static_cast<int>(vpp[2*i]);
-        if(vtype==4) {
+        if(vtype == 4) {
             double amp = vpp[2*i+1];
-            double tmp = 1.5*amp*amp;
+            double tmp = 1.5 * amp * amp;
             if(tmp > target) target = tmp;
         }
     }
 
-    hit_model.setup(ax, ay, az, lx, ly, lz, spars->hit_kf2, target, spars->hit_init_spectrum_type);
-    hit_model.initialize_coefficients(rank+1);
-
-    hit_use_fft = false;
+#ifdef HIT_USE_FFTW
     if(spars->hit_fft_enable) {
-        hit_use_fft = hit_fft.setup(spars->sys_size[0], spars->sys_size[1], spars->sys_size[2], lx, ly, lz,
-            spars->hit_kf2, target, spars->hit_init_spectrum_type);
-        if(hit_use_fft) hit_fft.initialize(rank+1234);
+        hit_use_fft = hit_fft.setup(
+            spars->sys_size[0], spars->sys_size[1], spars->sys_size[2],
+            lx, ly, lz,
+            spars->hit_kf2,
+            target,
+            spars->hit_init_spectrum_type
+        );
+        if(hit_use_fft) {
+            hit_fft.initialize(1234);
+            hit_fft.enabled = true;
+        }
+        return;
     }
+#endif
+
+#ifndef HIT_USE_FFTW
+    hit_model.setup(ax, ay, az, lx, ly, lz,
+                    spars->hit_kf2,
+                    target,
+                    spars->hit_init_spectrum_type);
+    hit_model.initialize_coefficients(1);
+    hit_model.enabled = true;
+#endif
 }
 
-void sim_manager::update_hit_state_from_velocity(const std::vector<double> &ux, const std::vector<double> &uy, const std::vector<double> &uz, double dt){
+void sim_manager::update_hit_state_from_velocity(const std::vector<double> &ux,
+                                                 const std::vector<double> &uy,
+                                                 const std::vector<double> &uz,
+                                                 double dt){
     if(hit_use_fft && hit_fft.enabled) {
         hit_fft.set_velocity_field(ux,uy,uz);
         hit_fft.update_lowk_forcing(dt);
+
         hit_energy_total = hit_fft.energy_total;
         hit_energy_low = hit_fft.energy_low;
         hit_energy_high = hit_fft.energy_high;
@@ -148,42 +178,51 @@ void sim_manager::create_objs(){
 }
 
 void sim_manager::add_obj(object *o) {
-	// new array, copy old stuff over
-	object **oarr = new object*[n_obj+1];
-	for (int i = 0; i < n_obj; i++) oarr[i] = objs[i];
+    // new array, copy old stuff over
+    object **oarr = new object*[n_obj+1];
+    for (int i = 0; i < n_obj; i++) oarr[i] = objs[i];
 
-	// delete old array (if it exists)
-	if (objs != NULL) delete[] objs;
+    // delete old array (if it exists)
+    if (objs != NULL) delete[] objs;
 
-	// assign new array to our pointer, set new val
-	// and increment number of objects
-	objs = oarr;
-	objs[n_obj++] = o;
+    // assign new array to our pointer, set new val
+    // and increment number of objects
+    objs = oarr;
+    objs[n_obj++] = o;
 }
 
 double sim_manager::phi(int obj_index, const double (&xi)[3]) const{
     if(obj_index<0 || obj_index >= n_obj) return nan("");
-	return objs[obj_index]->phi(xi);
+    return objs[obj_index]->phi(xi);
 }
 
 void sim_manager::isotropic_turbulence_forcing(double x,double y,double z,double t,
-    double dt, double &fx,double &fy,double &fz) const {
+                                               double dt, double &fx,double &fy,double &fz) const {
     (void)t;
+    fx = fy = fz = 0.0;
+
+#ifdef HIT_USE_FFTW
     if(hit_use_fft && hit_fft.enabled) {
-        double xh=(x-ax)/lx, yh=(y-ay)/ly, zh=(z-az)/lz;
+        double xh=(x-ax)/lx;
+        double yh=(y-ay)/ly;
+        double zh=(z-az)/lz;
         hit_fft.sample_forcing(xh,yh,zh,fx,fy,fz);
         return;
     }
+#endif
+
+#ifndef HIT_USE_FFTW
     hit_model.evaluate_forcing(x,y,z,dt,fx,fy,fz);
+#endif
 }
 
 void sim_manager::fluid_acceleration(double x,double y,double z,double t,
-    double &fx,double &fy,double &fz) {
+                                     double &fx,double &fy,double &fz) {
     isotropic_turbulence_forcing(x,y,z,t,dt_reg,fx,fy,fz);
 }
 
 void sim_manager::velocity(double x,double y,double z,
-	double &u,double &v,double &w) {
+                           double &u,double &v,double &w) {
     u=0; v=0; w=0;
     const double coords[3] = {x,y,z};
     double rx[3] = {0,0,0};
@@ -198,7 +237,17 @@ void sim_manager::velocity(double x,double y,double z,
         else if (vtype == 2) v+= amp;
         else if (vtype == 3) w+= amp;
         else if (vtype == 4) {
-            if(hit_use_fft && hit_fft.enabled){ double xh=(x-ax)/lx, yh=(y-ay)/ly, zh=(z-az)/lz; hit_fft.sample_initial_velocity(xh,yh,zh,u,v,w);} else hit_model.add_initial_velocity(x, y, z, u, v, w);
+#ifdef HIT_USE_FFTW
+            if(hit_use_fft && hit_fft.enabled) {
+                double xh=(x-ax)/lx;
+                double yh=(y-ay)/ly;
+                double zh=(z-az)/lz;
+                hit_fft.sample_initial_velocity(xh,yh,zh,u,v,w);
+            }
+#endif
+#ifndef HIT_USE_FFTW
+            hit_model.add_initial_velocity(x, y, z, u, v, w);
+#endif
         }
         else {
 
@@ -216,45 +265,45 @@ void sim_manager::velocity(double x,double y,double z,
     if(tmp>vmax) vmax = tmp;
 }
 
-void sim_manager::solid_acceleration(const int obj_id, const double (&rval)[3], double x, double y, double z, double t,	double &fx,double &fy,double &fz){
-//void sim_manager::solid_acceleration(const int obj_id, const double (&rval)[3], double x, double y, double z, double t,	double &fx,double &fy,double &fz, const double vx, const double vy, const double vz){
+void sim_manager::solid_acceleration(const int obj_id, const double (&rval)[3], double x, double y, double z, double t, double &fx,double &fy,double &fz){
+//void sim_manager::solid_acceleration(const int obj_id, const double (&rval)[3], double x, double y, double z, double t, double &fx,double &fy,double &fz, const double vx, const double vy, const double vz){
     fx=fy=fz=0;
 }
 
 // FLUID CONVERGENCE
 void sim_ftest::velocity(double x,double y,double z,
-	double &u,double &v,double &w) {
-	u =     - sin(2*M_PI*x) * cos(2*M_PI*y) * cos(2*M_PI*z);
-	v = 0.5 * cos(2*M_PI*x) * sin(2*M_PI*y) * cos(2*M_PI*z);
-	w = 0.5 * cos(2*M_PI*x) * cos(2*M_PI*y) * sin(2*M_PI*z);
+                         double &u,double &v,double &w) {
+    u =     - sin(2*M_PI*x) * cos(2*M_PI*y) * cos(2*M_PI*z);
+    v = 0.5 * cos(2*M_PI*x) * sin(2*M_PI*y) * cos(2*M_PI*z);
+    w = 0.5 * cos(2*M_PI*x) * cos(2*M_PI*y) * sin(2*M_PI*z);
     double tmp = sqrt(u*u+v*v+w*w);
     if(tmp>vmax) vmax = tmp;
 }
 
 void sim_ftest::pressure(double x,double y,double z,double &p) {
-	p = 3*M_PI*fm.mu*cos(2*M_PI*x)*cos(2*M_PI*y)*cos(2*M_PI*z);
+    p = 3*M_PI*fm.mu*cos(2*M_PI*x)*cos(2*M_PI*y)*cos(2*M_PI*z);
 }
 
 void sim_ftest::exact(double x,double y,double z,double t,
-	double h,double &u,double &v,double &w,double &p) {
+                      double h,double &u,double &v,double &w,double &p) {
 
-	// get exact vels at cell center
-	velocity(x,y,z,u,v,w);
-	u *= cos(2*M_PI*t);
-	v *= cos(2*M_PI*t);
-	w *= cos(2*M_PI*t);
+    // get exact vels at cell center
+    velocity(x,y,z,u,v,w);
+    u *= cos(2*M_PI*t);
+    v *= cos(2*M_PI*t);
+    w *= cos(2*M_PI*t);
 
-	// shift to corner for pressure
-	x -= 0.5*h;
-	y -= 0.5*h;
-	z -= 0.5*h;
-	pressure(x,y,z,p);
-	p *= (cos(2*M_PI*t) - sin(2*M_PI*t)/(6*M_PI*fm.mu));
+    // shift to corner for pressure
+    x -= 0.5*h;
+    y -= 0.5*h;
+    z -= 0.5*h;
+    pressure(x,y,z,p);
+    p *= (cos(2*M_PI*t) - sin(2*M_PI*t)/(6*M_PI*fm.mu));
 }
 
 void sim_ftest::fluid_acceleration(double x,double y,double z,double t,
-	double &fx,double &fy,double &fz) {
-	fx = (12*M_PI*cos(2*M_PI*y)*cos(2*M_PI*z)*(-6*M_PI*fm.mu*cos(2*M_PI*t) +
+                                   double &fx,double &fy,double &fz) {
+    fx = (12*M_PI*cos(2*M_PI*y)*cos(2*M_PI*z)*(-6*M_PI*fm.mu*cos(2*M_PI*t) +
             sin(2*M_PI*t))*sin(2*M_PI*x) + M_PI*cos(2*M_PI*t)*cos(2*M_PI*t) *
             (2+cos(4*M_PI*y) + cos(4*M_PI*z))*sin(4*M_PI*x))/4;
     fy = -(M_PI*cos(2*M_PI*t)*cos(2*M_PI*t) *
@@ -265,155 +314,155 @@ void sim_ftest::fluid_acceleration(double x,double y,double z,double t,
 
 // SOLID CONVERGENCE / SHEAR WAVE
 sim_stest::sim_stest(const sim_params *spars) : sim_manager(spars),
-	a(0.01),k(2*M_PI),w(2*M_PI) {
-	shear_cube *cube = new shear_cube(a,k);
-	add_obj(cube);
+    a(0.01),k(2*M_PI),w(2*M_PI) {
+    shear_cube *cube = new shear_cube(a,k);
+    add_obj(cube);
 }
 
 void sim_stest::exact(double x,double y,double z,double t,
-	double h,double &u,double &v,double &w,double &p) {
-	u = this->w*a*sin(k*z - w*t);
-	v = this->w*a*sin(k*z - w*t);
-	w = 0;
+                      double h,double &u,double &v,double &w,double &p) {
+    u = this->w*a*sin(k*z - w*t);
+    v = this->w*a*sin(k*z - w*t);
+    w = 0;
 
-	x -= 0.5*h;
-	y -= 0.5*h;
-	z -= 0.5*h;
-	p = -sm_array[0].G * a*a*k * (-k*cos(2*(k*z-this->w*t)) + cos(2*this->w*t - k)*sin(k))/3;
+    x -= 0.5*h;
+    y -= 0.5*h;
+    z -= 0.5*h;
+    p = -sm_array[0].G * a*a*k * (-k*cos(2*(k*z-this->w*t)) + cos(2*this->w*t - k)*sin(k))/3;
 }
 
 void sim_stest::pressure(double x,double y,double z,double &p) {
-	p = -sm_array[0].G * a*a*k * (-k*cos(2*k*z) + cos(-k)*sin(k))/3;
+    p = -sm_array[0].G * a*a*k * (-k*cos(2*k*z) + cos(-k)*sin(k))/3;
 }
 
 void sim_stest::velocity(double x,double y,double z,
-	double &u,double &v,double &w) {
-	u = this->w*a*sin(k*z);
-	v = this->w*a*sin(k*z);
-	w = 0;
+                         double &u,double &v,double &w) {
+    u = this->w*a*sin(k*z);
+    v = this->w*a*sin(k*z);
+    w = 0;
     double tmp = sqrt(u*u+v*v+w*w);
     if(tmp>vmax) vmax = tmp;
 }
 
-void sim_objects::solid_acceleration(const int obj_id, const double (&rval)[3], double x, double y, double z, double t,	double &fx,double &fy,double &fz){
-        double krepx, krepy, krepz;
-        krepx = wall_acc_mult*avg_velx[obj_id]*avg_velx[obj_id];
-        krepy = wall_acc_mult*avg_vely[obj_id]*avg_vely[obj_id];
-        krepz = wall_acc_mult*avg_velz[obj_id]*avg_velz[obj_id];
+void sim_objects::solid_acceleration(const int obj_id, const double (&rval)[3], double x, double y, double z, double t, double &fx,double &fy,double &fz){
+    double krepx, krepy, krepz;
+    krepx = wall_acc_mult*avg_velx[obj_id]*avg_velx[obj_id];
+    krepy = wall_acc_mult*avg_vely[obj_id]*avg_vely[obj_id];
+    krepz = wall_acc_mult*avg_velz[obj_id]*avg_velz[obj_id];
 
-        if(krepx<min_wall_acc) krepx = min_wall_acc;
-        if(krepy<min_wall_acc) krepy = min_wall_acc;
-        if(krepz<min_wall_acc) krepz = min_wall_acc;
+    if(krepx<min_wall_acc) krepx = min_wall_acc;
+    if(krepy<min_wall_acc) krepy = min_wall_acc;
+    if(krepz<min_wall_acc) krepz = min_wall_acc;
 
-        // We use fx,fy,fz, but they are really accelerations
-        fx=fy=fz=0;
-        double phiv = phi(obj_id, rval);
-        // wall forces in x direction
-        if(walls[0]){
-            double dist = x-wall_pos[0];
-            if(dist<=wall_dist){
-                fx += delta_func_wall(dist*winv) * krepx *wall_trans_func(phiv,dx,dxsp);
-            }
+    // We use fx,fy,fz, but they are really accelerations
+    fx=fy=fz=0;
+    double phiv = phi(obj_id, rval);
+    // wall forces in x direction
+    if(walls[0]){
+        double dist = x-wall_pos[0];
+        if(dist<=wall_dist){
+            fx += delta_func_wall(dist*winv) * krepx *wall_trans_func(phiv,dx,dxsp);
         }
-        if(walls[1]){
-            double dist = wall_pos[1]-x;
-            if(dist<=wall_dist){
-                fx -= delta_func_wall(dist*winv) * krepx *wall_trans_func(phiv,dx,dxsp);
-            }
+    }
+    if(walls[1]){
+        double dist = wall_pos[1]-x;
+        if(dist<=wall_dist){
+            fx -= delta_func_wall(dist*winv) * krepx *wall_trans_func(phiv,dx,dxsp);
         }
+    }
 
-        // wall forces in y direction
-        if(walls[2]){
-            double dist = y-wall_pos[2];
-            if(dist<=wall_dist){
-                fy += delta_func_wall(dist*winv) * krepy *wall_trans_func(phiv,dy,dysp);
-            }
+    // wall forces in y direction
+    if(walls[2]){
+        double dist = y-wall_pos[2];
+        if(dist<=wall_dist){
+            fy += delta_func_wall(dist*winv) * krepy *wall_trans_func(phiv,dy,dysp);
         }
-        if(walls[3]){
-            double dist = wall_pos[3]-y;
-            if(dist<=wall_dist){
-                fy -= delta_func_wall(dist*winv) * krepy *wall_trans_func(phiv,dy,dysp);
-            }
+    }
+    if(walls[3]){
+        double dist = wall_pos[3]-y;
+        if(dist<=wall_dist){
+            fy -= delta_func_wall(dist*winv) * krepy *wall_trans_func(phiv,dy,dysp);
         }
+    }
 
-        // wall forces in z direction
-        if(walls[4]){
-            double dist = z-wall_pos[4];
-            if(dist<=wall_dist) {
-                fz += delta_func_wall(dist*winv) * krepz *wall_trans_func(phiv,dz,dzsp);
-            }
+    // wall forces in z direction
+    if(walls[4]){
+        double dist = z-wall_pos[4];
+        if(dist<=wall_dist) {
+            fz += delta_func_wall(dist*winv) * krepz *wall_trans_func(phiv,dz,dzsp);
+        }
 #if 0
-            // HERE TO HARD CODE A WALL AT 1/2 slope, i.e. z = 0.5*x
-            double dist = z-0.5*x;
-            // normal distance from a point to the plane that has a 1/2 slope
-            double norm_dist = dist * 0.894;
-            if(norm_dist<=wall_dist){
-                double tmp_force = delta_func_wall(dist*winv) * krepz *wall_trans_func(phiv,dz,dzsp);
-                fz += tmp_force * 0.8;
-                fx -= tmp_force * 0.4;
-            }
+        // HERE TO HARD CODE A WALL AT 1/2 slope, i.e. z = 0.5*x
+        double dist = z-0.5*x;
+        // normal distance from a point to the plane that has a 1/2 slope
+        double norm_dist = dist * 0.894;
+        if(norm_dist<=wall_dist){
+            double tmp_force = delta_func_wall(dist*winv) * krepz *wall_trans_func(phiv,dz,dzsp);
+            fz += tmp_force * 0.8;
+            fx -= tmp_force * 0.4;
+        }
 #endif
+    }
+    if(walls[5]){
+        double dist = wall_pos[5]-z;
+        if(dist<=wall_dist){
+            fz -= delta_func_wall(dist*winv) * krepz *wall_trans_func(phiv,dz,dzsp);
         }
-        if(walls[5]){
-            double dist = wall_pos[5]-z;
-            if(dist<=wall_dist){
-                fz -= delta_func_wall(dist*winv) * krepz *wall_trans_func(phiv,dz,dzsp);
-            }
-        }
-        double f_norm = sqrt(fx*fx + fy*fy + fz*fz);
-        if(f_norm >= K_stiff ){
-            double normfac = K_stiff/f_norm;
-            fx *= normfac;
-            fy *= normfac;
-            fz *= normfac;
-        }
-        // Sometimes the anchors edge need to be specified by 2 distances
-        // e.g. a cylindrical anchor region, R, L
-        double ldx=0, ldy=0, ldz=0, dtoe1=2*eps, dtoe2=2*eps;
-        objs[obj_id]->passive_acc_deformation(rval, eps, x, y, z, t, ldx, ldy, ldz, dtoe1, dtoe2);
-        double K = K_stiff*heaviside(dtoe1)*heaviside(dtoe2);
-        fx-=K*ldx;
-        fy-=K*ldy;
-        fz-=K*ldz;
+    }
+    double f_norm = sqrt(fx*fx + fy*fy + fz*fz);
+    if(f_norm >= K_stiff ){
+        double normfac = K_stiff/f_norm;
+        fx *= normfac;
+        fy *= normfac;
+        fz *= normfac;
+    }
+    // Sometimes the anchors edge need to be specified by 2 distances
+    // e.g. a cylindrical anchor region, R, L
+    double ldx=0, ldy=0, ldz=0, dtoe1=2*eps, dtoe2=2*eps;
+    objs[obj_id]->passive_acc_deformation(rval, eps, x, y, z, t, ldx, ldy, ldz, dtoe1, dtoe2);
+    double K = K_stiff*heaviside(dtoe1)*heaviside(dtoe2);
+    fx-=K*ldx;
+    fy-=K*ldy;
+    fz-=K*ldz;
 
-        // Add gravitational acceleration
-        fz += gravity*heaviside(phiv);
+    // Add gravitational acceleration
+    fz += gravity*heaviside(phiv);
 }
 
 // FLUID CONVERGENCE
 void object_mills::velocity(double x,double y,double z,
-	double &u,double &v,double &w) {
-	u =     - sin(2*M_PI*x) * cos(2*M_PI*y) * cos(2*M_PI*z);
-	v = 0.5 * cos(2*M_PI*x) * sin(2*M_PI*y) * cos(2*M_PI*z);
-	w = 0.5 * cos(2*M_PI*x) * cos(2*M_PI*y) * sin(2*M_PI*z);
+                            double &u,double &v,double &w) {
+    u =     - sin(2*M_PI*x) * cos(2*M_PI*y) * cos(2*M_PI*z);
+    v = 0.5 * cos(2*M_PI*x) * sin(2*M_PI*y) * cos(2*M_PI*z);
+    w = 0.5 * cos(2*M_PI*x) * cos(2*M_PI*y) * sin(2*M_PI*z);
     double tmp = sqrt(u*u+v*v+w*w);
     if(tmp>vmax) vmax = tmp;
 }
 
 void object_mills::pressure(double x,double y,double z,double &p) {
-	p = 3*M_PI*fm.mu*cos(2*M_PI*x)*cos(2*M_PI*y)*cos(2*M_PI*z);
+    p = 3*M_PI*fm.mu*cos(2*M_PI*x)*cos(2*M_PI*y)*cos(2*M_PI*z);
 }
 
 void object_mills::exact(double x,double y,double z,double t,
-	double h,double &u,double &v,double &w,double &p) {
+                         double h,double &u,double &v,double &w,double &p) {
 
-	// get exact vels at cell center
-	velocity(x,y,z,u,v,w);
-	u *= cos(2*M_PI*t);
-	v *= cos(2*M_PI*t);
-	w *= cos(2*M_PI*t);
+    // get exact vels at cell center
+    velocity(x,y,z,u,v,w);
+    u *= cos(2*M_PI*t);
+    v *= cos(2*M_PI*t);
+    w *= cos(2*M_PI*t);
 
-	// shift to corner for pressure
-	x -= 0.5*h;
-	y -= 0.5*h;
-	z -= 0.5*h;
-	pressure(x,y,z,p);
-	p *= (cos(2*M_PI*t) - sin(2*M_PI*t)/(6*M_PI*fm.mu));
+    // shift to corner for pressure
+    x -= 0.5*h;
+    y -= 0.5*h;
+    z -= 0.5*h;
+    pressure(x,y,z,p);
+    p *= (cos(2*M_PI*t) - sin(2*M_PI*t)/(6*M_PI*fm.mu));
 }
 
 void object_mills::fluid_acceleration(double x,double y,double z,double t,
-	double &fx,double &fy,double &fz) {
-	fx = (12*M_PI*cos(2*M_PI*y)*cos(2*M_PI*z)*(-6*M_PI*fm.mu*cos(2*M_PI*t) +
+                                      double &fx,double &fy,double &fz) {
+    fx = (12*M_PI*cos(2*M_PI*y)*cos(2*M_PI*z)*(-6*M_PI*fm.mu*cos(2*M_PI*t) +
             sin(2*M_PI*t))*sin(2*M_PI*x) + M_PI*cos(2*M_PI*t)*cos(2*M_PI*t) *
             (2+cos(4*M_PI*y) + cos(4*M_PI*z))*sin(4*M_PI*x))/4;
     fy = -(M_PI*cos(2*M_PI*t)*cos(2*M_PI*t) *
@@ -421,4 +470,3 @@ void object_mills::fluid_acceleration(double x,double y,double z,double t,
     fz = -(M_PI*cos(2*M_PI*t)*cos(2*M_PI*t) *
             (-1+cos(4*M_PI*x) -2*cos(4*M_PI*y))*sin(4*M_PI*z))/8;
 }
-

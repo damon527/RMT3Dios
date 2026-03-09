@@ -458,6 +458,7 @@ int fluid_3d::step_forward(int debug){
 
 // MVP spectral-style HIT: project current flow to low-k modal basis and update diagnostics.
     // When FFT backend is active we bypass this legacy modal-accumulator path.
+#ifndef HIT_USE_FFTW
     if(mgmt->hit_model.enabled && !(mgmt->hit_use_fft && mgmt->hit_fft.enabled)) {
 #ifdef HIT_FFTW_DEBUG
         if(rank==0) fprintf(stderr, "[HIT_FFTW] WARNING: entering legacy Stage-1 modal update path.\n");
@@ -496,6 +497,7 @@ int fluid_3d::step_forward(int debug){
         mgmt->hit_alpha = 1.0;
         mgmt->hit_forcing_l2 = 0.0;
     }
+#endif
 
     if(mgmt->hit_use_fft && mgmt->hit_fft.enabled) {
 #ifdef HIT_FFTW_DEBUG
