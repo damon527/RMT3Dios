@@ -1,0 +1,17 @@
+# This is a local defintion file for Makefile
+# Use all caps
+DEBUG   = FALSE
+VAR_DEN = FALSE
+TANG    = FALSE
+PGMG_DIR =
+
+FFTW   = FALSE
+# Optional FFTW install hints.
+# You can set either FFTW_PREFIX, or explicit FFTW_INC/FFTW_LIB.
+# Examples:
+#   FFTW_PREFIX=/usr
+#   FFTW_INC=-I/usr/include
+#   FFTW_LIB=-L/usr/lib/x86_64-linux-gnu
+FFTW_PREFIX =
+FFTW_INC =
+FFTW_LIB =
