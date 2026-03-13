@@ -183,6 +183,18 @@ class fluid_3d {
 	double *lx0, *ly0, *lz0;
 	/** output string for sharing status with user */
 	char *out;
+	
+			/** metadata for MPI-safe HIT FFT all-gather path */
+	bool hit_fft_comm_ready;
+	int hit_fft_nprocs;
+	std::vector<int> hit_fft_dom_info;
+	std::vector<int> hit_fft_counts;
+	std::vector<int> hit_fft_displs;
+	std::vector<double> hit_fft_sendbuf;
+	std::vector<double> hit_fft_recvbuf;
+	std::vector<double> hit_fft_ux;
+	std::vector<double> hit_fft_uy;
+	std::vector<double> hit_fft_uz;
 	/** A timer object to keep track of old and new extrapolation routine time usage */
 	timer watch;
 	extrap_helper<3> expper;
@@ -413,6 +425,8 @@ class fluid_3d {
 	void assemble_contour();
 	void gather_sizes();
 	void setup_output_dimensions();
+	void setup_hit_fft_parallel_metadata();
+	void gather_velocity_for_hit_fft(std::vector<double> &ux, std::vector<double> &uy, std::vector<double> &uz);
 	void send_contour_data(std::vector<double> &pv,std::vector<int> &q,std::vector<int> &q2,MPI_Request *sreq,int cnum);
 	void edge_detect(int ijk,int dir,std::vector<double> &pv,std::vector<int> &q,int cnum);
 	void box_detect(int ijk,std::vector<int> &q2,unsigned int &ttri,int cnum);

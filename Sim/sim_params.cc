@@ -28,6 +28,7 @@ sim_params::sim_params(const char *fn):
 	vel_profile(NULL),
     hit_enable(false), hit_kf2(3),
     hit_target_energy(-1), hit_target_urms(-1), hit_init_spectrum_type(0), hit_fft_enable(false),
+    hit_fft_update_stride(1),
     // solid params, assume no solid, only add as user provides
     n_obj(0), nlayers(8),
     max_extrap_rs(5),
@@ -190,6 +191,9 @@ sim_params::sim_params(const char *fn):
             hit_init_spectrum_type = final_int(ln);
         } else if(se(bp, "hit_fft_enable")){
             hit_fft_enable = final_int(ln);
+        } else if(se(bp, "hit_fft_update_stride")){
+            int tmp = final_int(ln);
+            hit_fft_update_stride = (tmp>0)?tmp:1;
         } else if(se(bp, "n_obj")){
             n_obj = final_int(ln);
             if(n_obj>0 && object_list==NULL){
@@ -491,6 +495,7 @@ void sim_params::print_params(){
            "            hit_target_urms           (-1)                     double\n"
            "            hit_init_spectrum_type    (0)                      int\n"
            "            hit_fft_enable            0/1(0)                   bool\n"
+           "            hit_fft_update_stride     (1)                      int\n"
            "            n_obj                     (0)                      int\n"
            "            nlayers                   (8)                      int\n"
            "            wt_n                      (2.5)                    double\n"
@@ -555,6 +560,7 @@ void sim_params::write_params(const char * chk_dirname){
                     "hit_target_urms           %g#(-1)                  double\n"
                     "hit_init_spectrum_type    %d#(0)                   int\n"
                     "hit_fft_enable            %d#(0)                   bool\n"
+                    "hit_fft_update_stride     %d#(1)                   int\n"
                     "# SOLID PROPERTIES\n"
                     "n_obj                     %d#(0)                   int\n"
                     "nlayers                   %d#(8)                   int\n"
@@ -573,7 +579,7 @@ void sim_params::write_params(const char * chk_dirname){
                     dt, T, cur_time,
                     ax,bx,ay,by,az,bz,
                     sim_type, fmu, fdt_pad,
-                    hit_enable, hit_kf2, hit_target_energy, hit_target_urms, hit_init_spectrum_type, hit_fft_enable,
+                    hit_enable, hit_kf2, hit_target_energy, hit_target_urms, hit_init_spectrum_type, hit_fft_enable, hit_fft_update_stride,
                     n_obj, nlayers, wt_n, ex_visc_mult,
                     ev_trans_mult, sdt_pad, dt_ex_pad, gravity);
                     fprintf(fh, "# SOLIDS CONFIGURATIONS\n");

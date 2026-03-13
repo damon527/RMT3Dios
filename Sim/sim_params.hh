@@ -101,6 +101,7 @@ class sim_params{
     double hit_target_urms;
     int hit_init_spectrum_type;
     bool hit_fft_enable;
+    int hit_fft_update_stride;
 	/** Params for solids, shared or global settings */
 	int n_obj, nlayers, max_extrap_rs;
 	double wt_n;

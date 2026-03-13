@@ -56,11 +56,12 @@ fluid_3d::fluid_3d(geometry *gm, sim_manager *mgmt_, sim_params *spars_) :
 	rm_mem(new ref_map[smn4*so4]),rm0(rm_mem+2*(1+sm4*(1+sn4))),
 	gx(new double[m]), gy(new double [n]), gz(new double[o]),
 	lx(new double[sm4]),ly(new double[sn4]),lz(new double[so4]),
-    lx0(lx+2),ly0(ly+2),lz0(lz+2),out(NULL),
-    watch("F3d", 5, "Extrapolation", "Pressure Poisson", "Communication", "Stresses", "MAC"),
-	expper(*gm, mgmt->weight_fac, spars),
-	osm(NULL),osn(NULL),oso(NULL),max_sizes(NULL),
-	cu_m(NULL),cu_n(NULL),cu_o(NULL) {
+      lx0(lx+2),ly0(ly+2),lz0(lz+2),out(NULL),
+	    hit_fft_comm_ready(false),hit_fft_nprocs(0),
+	    watch("F3d", 5, "Extrapolation", "Pressure Poisson", "Communication", "Stresses", "MAC"),
+		expper(*gm, mgmt->weight_fac, spars),
+		osm(NULL),osn(NULL),oso(NULL),max_sizes(NULL),
+		cu_m(NULL),cu_n(NULL),cu_o(NULL) {
 
 	// Set up the polygonalizing tables
 	*ptri_poly=const_cast<char*>(tri_poly);
@@ -74,7 +75,99 @@ fluid_3d::fluid_3d(geometry *gm, sim_manager *mgmt_, sim_params *spars_) :
 	if(spars->display) display_stats();
 	set_omp(spars->omp_num_thr);
 
-    printf("#### I'm rank %d, my own box (%d %d %d) to (%d %d %d)\n", rank, ai, aj, ak, bi, bj, bk);
+printf("#### I'm rank %d, my own box (%d %d %d) to (%d %d %d)\n", rank, ai, aj, ak, bi, bj, bk);
+	}
+
+void fluid_3d::setup_hit_fft_parallel_metadata() {
+    if(hit_fft_comm_ready) return;
+
+    MPI_Comm_size(grid->cart, &hit_fft_nprocs);
+    hit_fft_dom_info.assign((size_t)6*hit_fft_nprocs, 0);
+
+    int local_info[6] = {ai, aj, ak, sm, sn, so};
+    MPI_Allgather(local_info, 6, MPI_INT,
+                  hit_fft_dom_info.data(), 6, MPI_INT,
+                  grid->cart);
+
+    hit_fft_counts.assign((size_t)hit_fft_nprocs, 0);
+    hit_fft_displs.assign((size_t)hit_fft_nprocs, 0);
+    for(int r=0; r<hit_fft_nprocs; r++) {
+        int rsm = hit_fft_dom_info[6*r + 3];
+        int rsn = hit_fft_dom_info[6*r + 4];
+        int rso = hit_fft_dom_info[6*r + 5];
+        hit_fft_counts[r] = 3*rsm*rsn*rso;
+        if(r>0) hit_fft_displs[r] = hit_fft_displs[r-1] + hit_fft_counts[r-1];
+    }
+    hit_fft_comm_ready = true;
+}
+
+void fluid_3d::gather_velocity_for_hit_fft(std::vector<double> &ux,
+                                           std::vector<double> &uy,
+                                           std::vector<double> &uz) {
+    if(!hit_fft_comm_ready) setup_hit_fft_parallel_metadata();
+
+    const int local_cells = sm*sn*so;
+    const int local_vals = 3*local_cells;
+    hit_fft_sendbuf.resize((size_t)local_vals);
+
+    size_t sid = 0;
+    for(int kk=0; kk<so; kk++) {
+        for(int jj=0; jj<sn; jj++) {
+            for(int ii=0; ii<sm; ii++) {
+                const field &node = u0[index(ii,jj,kk)];
+                hit_fft_sendbuf[sid++] = node.vel[0];
+                hit_fft_sendbuf[sid++] = node.vel[1];
+                hit_fft_sendbuf[sid++] = node.vel[2];
+            }
+        }
+    }
+
+    int total_vals = 0;
+    if(hit_fft_nprocs>0) {
+        total_vals = hit_fft_displs[hit_fft_nprocs-1] + hit_fft_counts[hit_fft_nprocs-1];
+    }
+    hit_fft_recvbuf.resize((size_t)total_vals);
+
+    MPI_Allgatherv(hit_fft_sendbuf.data(), local_vals, MPI_DOUBLE,
+                   hit_fft_recvbuf.data(), hit_fft_counts.data(), hit_fft_displs.data(), MPI_DOUBLE,
+                   grid->cart);
+
+    const size_t global_cells = (size_t)m*n*o;
+    const size_t expected_vals = 3*global_cells;
+    if((size_t)total_vals != expected_vals) {
+        if(rank==0) {
+            fprintf(stderr, "[HIT_FFTW] gather_velocity_for_hit_fft: expected %zu values, got %d.\n", expected_vals, total_vals);
+        }
+        MPI_Abort(grid->cart, 911);
+    }
+
+    ux.assign(global_cells, 0.0);
+    uy.assign(global_cells, 0.0);
+    uz.assign(global_cells, 0.0);
+
+    for(int r=0; r<hit_fft_nprocs; r++) {
+        const int rai = hit_fft_dom_info[6*r + 0];
+        const int raj = hit_fft_dom_info[6*r + 1];
+        const int rak = hit_fft_dom_info[6*r + 2];
+        const int rsm = hit_fft_dom_info[6*r + 3];
+        const int rsn = hit_fft_dom_info[6*r + 4];
+        const int rso = hit_fft_dom_info[6*r + 5];
+
+        size_t pid = (size_t)hit_fft_displs[r];
+        for(int kk=0; kk<rso; kk++) {
+            for(int jj=0; jj<rsn; jj++) {
+                for(int ii=0; ii<rsm; ii++) {
+                    int gi = rai + ii;
+                    int gj = raj + jj;
+                    int gk = rak + kk;
+                    size_t gid = ((size_t)gi*n + (size_t)gj)*(size_t)o + (size_t)gk;
+                    ux[gid] = hit_fft_recvbuf[pid++];
+                    uy[gid] = hit_fft_recvbuf[pid++];
+                    uz[gid] = hit_fft_recvbuf[pid++];
+                }
+            }
+        }
+    }
 }
 
 /**
@@ -501,18 +594,17 @@ int fluid_3d::step_forward(int debug){
 
     if(mgmt->hit_use_fft && mgmt->hit_fft.enabled) {
 #ifdef HIT_FFTW_DEBUG
-        if(rank==0) fprintf(stderr, "[HIT_FFTW] entering FFTW HIT update path at step %d.\n", nt);
-#endif
-        std::vector<double> ux((size_t)sm*sn*so), uy((size_t)sm*sn*so), uz((size_t)sm*sn*so);
-        size_t id=0;
-        for(int kk=0; kk<so; kk++) for(int jj=0; jj<sn; jj++) for(int ii=0; ii<sm; ii++,id++) {
-            field &node = u0[index(ii,jj,kk)];
-            ux[id]=node.vel[0]; uy[id]=node.vel[1]; uz[id]=node.vel[2];
+	        if(rank==0) fprintf(stderr, "[HIT_FFTW] entering FFTW HIT update path at step %d.\n", nt);
+	#endif
+            const int hit_stride = (spars->hit_fft_update_stride>0)?spars->hit_fft_update_stride:1;
+            if(((nt-1)%hit_stride)==0) {
+                gather_velocity_for_hit_fft(hit_fft_ux, hit_fft_uy, hit_fft_uz);
+                mgmt->update_hit_state_from_velocity(hit_fft_ux,hit_fft_uy,hit_fft_uz,dt*hit_stride);
+            }
+            double_int gmx_ext, gmn_ext;
+            mgmt->hit_div_phys_l2 = div_u(gmx_ext, gmn_ext);
         }
-        mgmt->update_hit_state_from_velocity(ux,uy,uz,dt);
-        double_int gmx_ext, gmn_ext;
-        mgmt->hit_div_phys_l2 = div_u(gmx_ext, gmn_ext);
-    }
+
 
 	if (trace) {
 //	if (rank==0) printf("FIRST TRACER\n");
