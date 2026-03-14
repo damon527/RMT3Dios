@@ -26,6 +26,11 @@
 // 19: Divergence of u edge
 // 20: Density -> only output nonzero values when variable density
 // 21: ||J-1|| -> only output sensible values when debug macro is on
+// 22-24: Total particle acceleration a_p components (x,y,z)
+// 25-27: Elastic acceleration a_e components (x,y,z)
+// 28-30: Extra-viscous acceleration a_sv components (x,y,z)
+// 31-33: Pressure-gradient acceleration g_p=-∇p/rho0 components (x,y,z)
+// 34-36: Forcing acceleration f components (x,y,z)
 
 /** An object that holds the paramters for writing out slices */
 class write_params{
@@ -41,7 +46,7 @@ class write_params{
 	int obj_id;
 	// the output format (0: matrix, 1: text, 2: gnuplot)
 	int format;
-	static const int numf=22;
+	static const int numf=37;
 	// the filename to write out
 	const char* filename;
 	static const char* default_names[numf];

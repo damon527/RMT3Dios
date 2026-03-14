@@ -1,5 +1,38 @@
 #include "fluid_3d.hh"
 
+void fluid_3d::write_field_3d(write_params wp,const char* filename) {
+    int global_dim[3] = {m, n, o};
+    if(wp.corner_field()) {
+        global_dim[0] = fem_grid.m;
+        global_dim[1] = fem_grid.n;
+        global_dim[2] = fem_grid.o;
+    }
+
+    const int dim = wp.dim;
+    const int nsl = global_dim[dim];
+    const int gslice_len = (global_dim[0]*global_dim[1]*global_dim[2])/nsl;
+
+    double *u_global = NULL;
+    FILE *fh = NULL;
+    if(rank==0) {
+        u_global = new double[gslice_len];
+        fh = p_safe_fopen(filename, "wb");
+        int header[5] = {wp.o_type, dim, global_dim[0], global_dim[1], global_dim[2]};
+        fwrite(header, sizeof(int), 5, fh);
+    }
+
+    for(int p=0;p<nsl;p++) {
+        wp.point = p;
+        slice(wp, u_global);
+        if(rank==0) fwrite(u_global, sizeof(double), gslice_len, fh);
+    }
+
+    if(rank==0) {
+        fclose(fh);
+        delete [] u_global;
+    }
+}
+
 void fluid_3d::write_slice(write_params wp,const char* filename) {
 	const int dinfo[5]={2,2,1,0,0};
 	int &dim=wp.dim;
@@ -339,6 +372,16 @@ int fluid_3d::copy_slice_to_buf(write_params wp,int point) {
 #else
             *b = 100.;
 #endif
+         } else if (wp.o_type >= 22 && wp.o_type <= 24) {
+            *b = u0[eid].sigma_p[0][wp.o_type-22];
+        } else if (wp.o_type >= 25 && wp.o_type <= 27) {
+            *b = u0[eid].sigma_e[0][wp.o_type-25];
+        } else if (wp.o_type >= 28 && wp.o_type <= 30) {
+            *b = u0[eid].sigma_sv[0][wp.o_type-28];
+        } else if (wp.o_type >= 31 && wp.o_type <= 33) {
+            *b = u0[eid].gradp_acc[wp.o_type-31];
+        } else if (wp.o_type >= 34 && wp.o_type <= 36) {
+            *b = u0[eid].forcing_acc[wp.o_type-34];
         } else {
 			if(wp.obj_id==-1) {
 				obj_id=min_phi_id(eid);

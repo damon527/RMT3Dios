@@ -93,7 +93,7 @@ executables: $(execs)
 -include Makefile.dep
 
 depend: $(src)
-	$(cxx) $(iflags) -MM $(src) >Makefile.dep
+	$(cxx) $(cflags) $(iflags) -MM $(src) >Makefile.dep
 
 clean:
 	rm -rf $(execs) $(objs) librmt3d.a *.dSYM

@@ -122,10 +122,10 @@ int main(int argc, char* argv[]) {
                 if(spars.dump_code & 2) { puts("# Output contours."); }
                 if(spars.dump_code & 4) {
                     puts("# Output slices.");
-                    printf("# Slice flag %d, format flag %d, slice in %d dir at %d\n"
+                    printf("# Slice flag %llu, format flag %d, slice in %d dir at %d\n"
                         , spars.out_flag, spars.data_fmt, spars.output_dim, spars.output_ind);
                     for(int i=0;i<write_params::numf;i++) {
-                        if((1<<i) & spars.out_flag) {
+                        if((1ULL<<i) & spars.out_flag) {
                             printf("#   Output field %s\n", write_params::default_names[i]);
                         }
                     }

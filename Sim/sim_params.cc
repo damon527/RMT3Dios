@@ -17,7 +17,7 @@ sim_params::sim_params(const char *fn):
     debug_flag(0), debug_obj_id(-1),
     obj_body(-1), data_fmt(0), out_flag(1|2|4|128),
     output_dim(2), output_ind(-1), dump_code(1|2),
-    ntracers(1000), num_iters(5),
+    ntracers(1000), khm_out_stride(1), num_iters(5),
     dt(1.), T(1.), cur_time(0),
     ax(0), ay(0), az(0), bx(1),
     by(1), bz(1), lx(bx-ax), ly(by-ay), lz(bz-az),
@@ -137,7 +137,7 @@ sim_params::sim_params(const char *fn):
         } else if(se(bp, "debug_obj_id")){
             debug_obj_id = final_int(ln);
         } else if(se(bp, "out_flag")){
-            out_flag = final_int(ln);
+            out_flag = final_ull(ln);
         } else if(se(bp, "obj_body")){
             obj_body = final_int(ln);
         } else if(se(bp, "data_fmt")){
@@ -152,6 +152,9 @@ sim_params::sim_params(const char *fn):
             dump_code =  final_uint(ln);
         } else if(se(bp, "ntracers")){
             ntracers = final_int(ln);
+        } else if(se(bp, "khm_out_stride")){
+            khm_out_stride = final_int(ln);
+            if(khm_out_stride < 1) khm_out_stride = 1;
         } else if(se(bp, "num_iters")){
             num_iters = final_int(ln);
         } else if(se(bp, "dt")){
@@ -477,11 +480,12 @@ void sim_params::print_params(){
            "            debug_obj_id              (-1)                     int\n"
            "            obj_body                  (-1)                     int\n"
            "            data_fmt                  (0)                      int\n"
-           "            out_flag                  (135)                    int\n"
+           "            out_flag                  (135)                    unsigned long long\n"
            "            output_dim                0/1/2(2)                 int\n"
            "            output_ind                (48)                     int\n"
            "            dump_code                 (3)                      unsigned int\n"
            "            ntracers                  (1000)                   int\n"
+           "            khm_out_stride            (1)                      int\n"
            "            dt                        (1.)                     double\n"
            "            T                         (1.)                     double\n"
            "            current_time              (0.)                     double\n"
@@ -538,11 +542,12 @@ void sim_params::write_params(const char * chk_dirname){
                     "debug_obj_id              %d#(-1)                   int\n"
                     "obj_body                  %d#(-1)                  int\n"
                     "data_fmt                  %d#(0)                   int\n"
-                    "out_flag                  %d#(135)                 int\n"
+                     "out_flag                  %llu#(135)               unsigned long long\n"
                     "output_dim                %d#0/1/2(2)              int\n"
                     "output_ind                %d#(48)                  int\n"
                     "dump_code                 %u#(3)                   unsigned int\n"
                     "ntracers                  %d#(1000)                int\n"
+                    "khm_out_stride            %d#(1)                   int\n"
                     "num_iters                 %d#(5)                   int\n"
                     "dt                        %g#(1.)                  double\n"
                     "T                         %g#(1.)                  double\n"
@@ -575,7 +580,7 @@ void sim_params::write_params(const char * chk_dirname){
                     frames, stop_short,
                     chkpt_freq, omp_num_thr, debug_flag, debug_obj_id,
                     obj_body, data_fmt, out_flag, output_dim,
-                    output_ind, dump_code, ntracers, num_iters,
+                    output_ind, dump_code, ntracers, khm_out_stride, num_iters,
                     dt, T, cur_time,
                     ax,bx,ay,by,az,bz,
                     sim_type, fmu, fdt_pad,

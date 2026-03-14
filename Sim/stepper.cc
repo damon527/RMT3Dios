@@ -11,6 +11,7 @@ stepper::stepper(sim_params &spars) :
 	curr_tot_step(init_step),frames(spars.frames),
     stop_short(spars.stop_short),lines(0),
     chkpt_freq(spars.chkpt_freq),
+    khm_out_stride((spars.khm_out_stride<1)?1:spars.khm_out_stride),
 	dump_code(spars.dump_code),T(spars.T),dt(spars.dt),df(T/(frames-1)),
 	dir(spars.dirname) {
 
@@ -44,7 +45,7 @@ stepper::stepper(sim_params &spars) :
 	wparams.clear();
 	if(dump_code&4) {
         for (int i = 0; i < write_params::numf; i++) {
-            if ((1<<i) & spars.out_flag) {
+            if ((1ULL<<i) & spars.out_flag) {
                 add_output(spars.output_dim,spars.output_ind,i,spars.obj_body,spars.data_fmt);
             }
         }

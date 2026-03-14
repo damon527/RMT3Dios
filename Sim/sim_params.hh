@@ -50,7 +50,7 @@ class sim_params{
 	// 512 reference map xi_x (9)
 	// 1024 reference map xi_y (10)
 	// 2048 reference map xi_z (11)
-	int out_flag;
+	unsigned long long out_flag;
 	// output dimension, 0-x, 1-y, 2-z
 	int output_dim;
 	// the index of the output slice
@@ -66,6 +66,7 @@ class sim_params{
 	unsigned int dump_code;
 	// number of tracers to use
 	int ntracers;
+	int khm_out_stride;
     // number of initial iterations
     int num_iters;
 	double dt, T;
@@ -197,6 +198,15 @@ class sim_params{
 	 * \param[in] ln the current line number. */
 	inline unsigned int final_uint(int ln) {
 		unsigned int temp=next_uint(ln);
+		check_no_more(ln);
+		return temp;
+	}
+	inline unsigned long long next_ull(int ln) {
+		unsigned long long temp = strtoull(next_token(ln), NULL, 10);
+		return temp;
+	}
+	inline unsigned long long final_ull(int ln) {
+		unsigned long long temp=next_ull(ln);
 		check_no_more(ln);
 		return temp;
 	}

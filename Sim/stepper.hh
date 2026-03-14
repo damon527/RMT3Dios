@@ -57,7 +57,8 @@ class stepper {
 	int lines;
 
     /** frequency of checkpoint files. */
-    int chkpt_freq;
+        int chkpt_freq;
+        const int khm_out_stride;
 	/** output operator code */
 	// 1 == dump tracers
 	// 2 == dump contours
@@ -217,6 +218,7 @@ stepper::stepper(sim_params &spars,p_class &pr) :
 	curr_tot_step(init_step),frames(spars.frames),
     stop_short(spars.stop_short),lines(0),
     chkpt_freq(spars.chkpt_freq),
+    khm_out_stride((spars.khm_out_stride<1)?1:spars.khm_out_stride),
 	dump_code(spars.dump_code), T(spars.T),dt(spars.dt),df(T/(frames-1)),
 	dir(spars.dirname) {
 
@@ -284,7 +286,7 @@ stepper::stepper(sim_params &spars,p_class &pr) :
 	wparams.clear();
 	if(dump_code&4) {
         for (int i = 0; i < write_params::numf; i++) {
-            if ((1<<i) & spars.out_flag) {
+            if ((1ULL<<i) & spars.out_flag) {
                 add_output(spars.output_dim,spars.output_ind,i,spars.obj_body,spars.data_fmt);
             }
         }
@@ -644,9 +646,15 @@ void stepper::write_files(p_class &pr, const int  snum, const int fnum) {
 	}
 
 	// Write some slices if specified
-	for(unsigned int i=0;i<wparams.size();i++) {
+        for(unsigned int i=0;i<wparams.size();i++) {
+        if(wparams[i].o_type>=22 && wparams[i].o_type<=36) {
+            if((fnum % khm_out_stride)!=0) continue;
+		    sprintf(fname_buf,"%s/%s.%05d.3d",dir,wparams[i].filename,fnum);
+		    pr.write_field_3d(wparams[i],fname_buf);
+        } else {
 		sprintf(fname_buf,"%s/%s.%05d",dir,wparams[i].filename,fnum);
 		pr.write_slice(wparams[i],fname_buf);
+        }
 	}
 
 	// Write checkpoint files if specified

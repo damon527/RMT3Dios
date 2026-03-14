@@ -333,9 +333,15 @@ class fluid_3d {
 	template<lower_faces F>
 	int collision_stress(int eid, double (&fluid_s)[3]);
 	template<lower_faces F>
-	void solid_stress(int eid, double (&solid_s)[3], double & sfrac);
+	void solid_stress(int eid, double (&solid_s)[3], double & sfrac,
+                      double (*solid_e)[3]=NULL, double (*solid_sv)[3]=NULL,
+                      bool include_active=true);
 	template<lower_faces F>
 	void fluid_stress(int eid, double (&fluid_s)[3]);
+	 void fill_particle_acceleration_fields(bool verbose);
+    void fill_khm_auxiliary_fields(bool verbose);
+    void report_particle_accel_consistency(bool verbose);
+    void forcing_acceleration(int ijk,double myx,double myy,double myz,double (&facc)[3]);
 	void velocity_grad(lower_faces F,int eid,matrix &grad_v);
 
 	void compute_stress(bool verbose);
@@ -406,6 +412,7 @@ class fluid_3d {
 	void display_stats();
 	void copy_slice_from_buf(int **sender_list,int co,double *g_val);
 	void write_slice(write_params params,const char* filename);
+	void write_field_3d(write_params params,const char* filename);
 	void write_chk_pt(const int step_num, const int chk_num, const char* filename);
 	void copy_chk_slice_to_buf(double *g_val, double *comm_buf, int *info);
 	void copy_chk_to_field(write_params wp);

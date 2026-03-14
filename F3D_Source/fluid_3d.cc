@@ -1157,30 +1157,9 @@ void fluid_3d::acceleration(int ijk,double myx,double myy, double myz,double (&a
     for(int i=0;i<3;i++) {
         tmp[i] = 0.;
     }
-	double anchor_acc[3]={0,0,0};
-	double sfrac=0, lfrac, phiv;
-	// solid acceleration
-	for(int s=0;s<mgmt->n_obj;s++){
-		ref_map *rp = get_refmap(eid,s+1);
-		if(rp!=NULL){
-			phiv=rp->phi(mgmt);
-			if(phiv<mgmt->eps){
-				lfrac = mgmt-> heaviside(phiv);
-				mgmt->solid_acceleration(s, rp->x, myx, myy, myz, time, anchor_acc[0], anchor_acc[1], anchor_acc[2]);
-				for(int nn=0;nn<3;nn++) tmp[nn]+=anchor_acc[nn];
-				sfrac += lfrac;
-			}
-		}
-	}
-    if(sfrac>1.) for(int nn=0;nn<3;nn++) tmp[nn] /= sfrac;
+    forcing_acceleration(ijk,myx,myy,myz,tmp);
 
     for(int nn=0;nn<3;nn++) acc[nn] += tmp[nn];
-
-    if(sfrac<1.) {
-        // get the fluid acceleration
-        mgmt->fluid_acceleration(myx,myy,myz,time,anchor_acc[0], anchor_acc[1], anchor_acc[2]);
-        for(int nn=0;nn<3;nn++) acc[nn]+=anchor_acc[nn]*(1-sfrac);
-    }
 }
 
 /** Compute half time step, half spatial step extrapolation of velocities, and store in fvel[6][3].
@@ -1521,27 +1500,29 @@ void fluid_3d::compute_stress(bool verbose){
 				const int eid = index(i,j,k);
 				field *fp = u0+eid;
 				int s=0;
-				double ss[3]={0,0,0};
+				double ss[3]={0,0,0}, se[3]={0,0,0}, ssv[3]={0,0,0};
 				double fs[3]={0,0,0};
 				double sfrac=0;
                 int err = 0;
-				// set left edge stress
-                solid_stress<LEFT>(eid, ss, sfrac);
+		solid_stress<LEFT>(eid, ss, sfrac, &se, &ssv, true);
                 if(sfrac>=1){
                     // set the stresses corresponding sigma_ij
                     // different from the f2d convention
                     // we arrange the stresses row wise
                     for(s=0;s<3;s++){
                         fp->sigma[LEFT][s] = ss[s]/sfrac;
+                        fp->sigma_e[LEFT][s] = se[s]/sfrac;
+                        fp->sigma_sv[LEFT][s] = ssv[s]/sfrac;
                     }
-                }
-                else {
+               } else {
                     fluid_stress<LEFT>(eid,fs);
                     for(s=0;s<3;s++){
                         fp->sigma[LEFT][s] = (1-sfrac)*fs[s] + ss[s];
+                        fp->sigma_e[LEFT][s] = se[s];
+                        fp->sigma_sv[LEFT][s] = ssv[s];
                     }
                 }
-
+                for(s=0;s<3;s++) fp->sigma_p[LEFT][s] = fp->sigma_e[LEFT][s] + fp->sigma_sv[LEFT][s];
                 err = collision_stress<LEFT>(eid, fp->sigma[LEFT]);
                 if(err!=0) {
                     printf("Something went wrong in collision_stress<LEFT> at position (%d %d %d)\n", i,j,k);
@@ -1550,26 +1531,29 @@ void fluid_3d::compute_stress(bool verbose){
 
                 sfrac=0;
                 for(s=0;s<3;s++){
-                    ss[s]=0; fs[s]=0;
+                    ss[s]=0; se[s]=0; ssv[s]=0; fs[s]=0;
                 }
 
                 // set front edge stress
-                solid_stress<FRONT>(eid, ss, sfrac);
+                solid_stress<FRONT>(eid, ss, sfrac, &se, &ssv, true);
                 if(sfrac>=1){
                     // set the stresses corresponding sigma_ij
                     // different from the f2d convention
                     // we arrange the stresses row wise
                     for(s=0;s<3;s++){
                         fp->sigma[FRONT][s] = ss[s]/sfrac;
+                         fp->sigma_e[FRONT][s] = se[s]/sfrac;
+                        fp->sigma_sv[FRONT][s] = ssv[s]/sfrac;
                     }
-                }
-                else {
+                 } else {
                     fluid_stress<FRONT>(eid,fs);
                     for(s=0;s<3;s++){
                         fp->sigma[FRONT][s] = (1-sfrac)*fs[s] + ss[s];
+                        fp->sigma_e[FRONT][s] = se[s];
+                        fp->sigma_sv[FRONT][s] = ssv[s];
                     }
                 }
-
+                for(s=0;s<3;s++) fp->sigma_p[FRONT][s] = fp->sigma_e[FRONT][s] + fp->sigma_sv[FRONT][s];
                 err = collision_stress<FRONT>(eid, fp->sigma[FRONT]);
                 if(err!=0){
                     printf("Something went wrong in collision_stress<FRONT> at position (%d %d %d)\n", i,j,k);
@@ -1578,37 +1562,133 @@ void fluid_3d::compute_stress(bool verbose){
 
                 sfrac=0;
                 for(s=0;s<3;s++){
-                    ss[s]=0; fs[s]=0;
+                    ss[s]=0; se[s]=0; ssv[s]=0; fs[s]=0;
                 }
 
                 // set down edge stress
-                solid_stress<DOWN>(eid, ss, sfrac);
+                solid_stress<DOWN>(eid, ss, sfrac, &se, &ssv, true);
                 if(sfrac>=1){
                     // set the stresses corresponding sigma_ij
                     // different from the f2d convention
                     // we arrange the stresses row wise
                     for(s=0;s<3;s++){
                         fp->sigma[DOWN][s] = ss[s]/sfrac;
+                        fp->sigma_e[DOWN][s] = se[s]/sfrac;
+                        fp->sigma_sv[DOWN][s] = ssv[s]/sfrac;
                     }
-                }
-                else {
+                } else {
                     fluid_stress<DOWN>(eid,fs);
                     for(s=0;s<3;s++){
                         fp->sigma[DOWN][s] = (1-sfrac)*fs[s] + ss[s];
+                        fp->sigma_e[DOWN][s] = se[s];
+                        fp->sigma_sv[DOWN][s] = ssv[s];
                     }
                 }
+                for(s=0;s<3;s++) fp->sigma_p[DOWN][s] = fp->sigma_e[DOWN][s] + fp->sigma_sv[DOWN][s];
                 err = collision_stress<DOWN>(eid, fp->sigma[DOWN]);
 
                 if(err!=0){
                     printf("Something went wrong in collision_stress<DOWN> at position (%d %d %d)\n", i,j,k);
                     exit(1);
                 }
+}
+		}
+	}
 
-			}// end of i
-		}// end of j
-	}// end of k
-
+    if(spars->out_flag & ((1ULL<<22)|(1ULL<<23)|(1ULL<<24)|(1ULL<<25)|(1ULL<<26)|(1ULL<<27)|(1ULL<<28)|(1ULL<<29)|(1ULL<<30))) {
+        fill_particle_acceleration_fields(verbose);
+    }
+    if(spars->out_flag & ((1ULL<<31)|(1ULL<<32)|(1ULL<<33)|(1ULL<<34)|(1ULL<<35)|(1ULL<<36))) {
+        fill_khm_auxiliary_fields(verbose);
+    }
     watch.toc(3);
+}
+
+void fluid_3d::fill_particle_acceleration_fields(bool verbose) {
+    const double rho0inv = 1.0/mgmt->fm.rho;
+    for(int k=-1;k<=so+1;k++) for(int j=-1;j<=sn+1;j++) for(int i=-1;i<=sm+1;i++) {
+        const int eid = index(i,j,k);
+        field *fp = u0 + eid;
+        field *xp = fp + 1;
+        field *yp = fp + sm4;
+        field *zp = fp + smn4;
+        for(int c=0;c<3;c++) {
+            fp->sigma_e[0][c] = rho0inv*(dxsp*(xp->sigma_e[0][c] - fp->sigma_e[0][c])
+                                      + dysp*(yp->sigma_e[1][c] - fp->sigma_e[1][c])
+                                      + dzsp*(zp->sigma_e[2][c] - fp->sigma_e[2][c]));
+            fp->sigma_sv[0][c] = rho0inv*(dxsp*(xp->sigma_sv[0][c] - fp->sigma_sv[0][c])
+                                       + dysp*(yp->sigma_sv[1][c] - fp->sigma_sv[1][c])
+                                       + dzsp*(zp->sigma_sv[2][c] - fp->sigma_sv[2][c]));
+            fp->sigma_p[0][c] = fp->sigma_e[0][c] + fp->sigma_sv[0][c];
+        }
+    }
+    report_particle_accel_consistency(verbose);
+}
+
+void fluid_3d::forcing_acceleration(int ijk,double myx,double myy,double myz,double (&facc)[3]) {
+    int eid = ijk + G0;
+    double anchor_acc[3]={0,0,0};
+    double sfrac=0, lfrac, phiv;
+
+    for(int s=0;s<mgmt->n_obj;s++){
+        ref_map *rp = get_refmap(eid,s+1);
+        if(rp!=NULL){
+            phiv=rp->phi(mgmt);
+            if(phiv<mgmt->eps){
+                lfrac = mgmt-> heaviside(phiv);
+                mgmt->solid_acceleration(s, rp->x, myx, myy, myz, time, anchor_acc[0], anchor_acc[1], anchor_acc[2]);
+                for(int nn=0;nn<3;nn++) facc[nn]+=anchor_acc[nn];
+                sfrac += lfrac;
+            }
+        }
+    }
+    if(sfrac>1.) for(int nn=0;nn<3;nn++) facc[nn] /= sfrac;
+
+    if(sfrac<1.) {
+        mgmt->fluid_acceleration(myx,myy,myz,time,anchor_acc[0], anchor_acc[1], anchor_acc[2]);
+        for(int nn=0;nn<3;nn++) facc[nn]+=anchor_acc[nn]*(1-sfrac);
+    }
+}
+
+void fluid_3d::fill_khm_auxiliary_fields(bool verbose) {
+    (void)verbose;
+    const double rho0inv = 1.0/mgmt->fm.rho;
+    for(int k=0;k<so;k++) for(int j=0;j<sn;j++) for(int i=0;i<sm;i++) {
+        const int ijk = index(i,j,k);
+        field *fp = u0 + ijk;
+        double gp[3] = {0,0,0};
+        neg_pres_grad(fp,gp);
+        for(int c=0;c<3;c++) fp->gradp_acc[c] = rho0inv*gp[c];
+
+        double frc[3] = {0,0,0};
+        forcing_acceleration(ijk,lx0[i],ly0[j],lz0[k],frc);
+        for(int c=0;c<3;c++) fp->forcing_acc[c] = frc[c];
+    }
+}
+
+void fluid_3d::report_particle_accel_consistency(bool verbose) {
+    const bool do_report = (spars->dump_code & 16) || verbose;
+    if(!do_report) return;
+
+    double l2_local=0, l2ref_local=0, max_local=0;
+    for(int k=0;k<so;k++) for(int j=0;j<sn;j++) for(int i=0;i<sm;i++) {
+        const field &f = u0[index(i,j,k)];
+        for(int c=0;c<3;c++) {
+            const double diff = f.sigma_p[0][c] - (f.sigma_e[0][c] + f.sigma_sv[0][c]);
+            l2_local += diff*diff;
+            l2ref_local += f.sigma_p[0][c]*f.sigma_p[0][c];
+            max_local = std::max(max_local, fabs(diff));
+        }
+    }
+    double l2_global=0, l2ref_global=0, max_global=0;
+    MPI_Allreduce(&l2_local,&l2_global,1,MPI_DOUBLE,MPI_SUM,grid->cart);
+    MPI_Allreduce(&l2ref_local,&l2ref_global,1,MPI_DOUBLE,MPI_SUM,grid->cart);
+    MPI_Allreduce(&max_local,&max_global,1,MPI_DOUBLE,MPI_MAX,grid->cart);
+
+    if(rank==0) {
+        const double rel_l2 = (l2ref_global>0)?sqrt(l2_global/l2ref_global):sqrt(l2_global);
+        printf("# particle accel decomposition check: relL2=%g max=%g\n", rel_l2, max_global);
+    }
 }
 
 /** Routine to compute collision stress.
@@ -1926,7 +2006,9 @@ int fluid_3d::collision_stress(int eid, double (&fluid_s)[3]){
 /** New routine to compute solid stress;
  * only on the lower faces. */
 template<lower_faces F>
-void fluid_3d::solid_stress(int eid, double (&solid_s)[3], double &sfrac){
+void fluid_3d::solid_stress(int eid, double (&solid_s)[3], double &sfrac,
+                           double (*solid_e)[3], double (*solid_sv)[3],
+                           bool include_active){
 	if(F>2) p_fatal_error("solid_stress: Unknown lower_faces, try again.\n", 1);
 
 	const int strides[3] ={1, sm4, smn4};
@@ -1939,7 +2021,7 @@ void fluid_3d::solid_stress(int eid, double (&solid_s)[3], double &sfrac){
 	// pad it with the index to first non_ghost node
 	int ind = G0 + eid;
     int locpos[3]={0,0,0};
-    unpack_index(ind, locpos[0], locpos[1], locpos[2]);
+    unpack_index(eid, locpos[0], locpos[1], locpos[2]);
 	// Since the parent function is called on all cells, we need to be careful
 	// in uing get_refmap() because if a grid point is on the edge (in outer ghost layer)
 	// and get_refmap(ind-strd) is call, it has a chance to return something non NULL
@@ -2113,15 +2195,18 @@ void fluid_3d::solid_stress(int eid, double (&solid_s)[3], double &sfrac){
         sigma.scale(G);
 
 		for(int nn=0;nn<3;nn++) {
-			solid_s[nn] += sigma(F,nn);
-			solid_s[nn] += ex_mu * facs[F] * (
+			const double e_term = sigma(F,nn);
+                        const double sv_term = ex_mu * facs[F] * (
 					(fp->vel[nn] - fp[-strd].vel[nn])
 			+ ( (nn==F) ? (fp->vel[nn] - fp[-strd].vel[nn]) :
 			  (0.25*(fp[ strides[nn]].vel[F] + fp[ strides[nn]-strd].vel[F]
 				    -fp[-strides[nn]].vel[F] - fp[-strides[nn]-strd].vel[F])))
 			);
 
-			if (add_astress) solid_s[nn] += astress(F,nn);
+			solid_s[nn] += e_term + sv_term;
+            if(solid_e!=NULL) (*solid_e)[nn] += e_term;
+            if(solid_sv!=NULL) (*solid_sv)[nn] += sv_term;
+			if (include_active && add_astress) solid_s[nn] += astress(F,nn);
 		}
 
 #if defined(DEBUG)
@@ -2160,7 +2245,7 @@ void fluid_3d::fluid_stress(int eid, double (&fluid_s)[3]){
 	field *fp = u0+eid;
     int ind = G0+eid;
     int locpos[3] = {0,0,0};
-    unpack_index(ind, locpos[0], locpos[1], locpos[2]);
+    unpack_index(eid, locpos[0], locpos[1], locpos[2]);
     locpos[F] -= 1;
 
 	double visc = mgmt->fm.mu;

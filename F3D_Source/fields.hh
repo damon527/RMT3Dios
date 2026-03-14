@@ -53,15 +53,26 @@ struct field {
 	/** stress (sans pressure). sigma[i][j] is partial_i u_j, located
 	 * at center of face i. */
 	double sigma[3][3];
-
+	/** decomposed particle stresses on lower faces: total/elastic/extra-viscous */
+	double sigma_p[3][3];
+	double sigma_e[3][3];
+	double sigma_sv[3][3];
+	/** KHM auxiliary Eulerian acceleration fields at cell center */
+	double gradp_acc[3];
+	double forcing_acc[3];
     field () {
         p = 0; dp = 0;
         q = 0;
         for (int i=0;i<3;i++){
             vel[i] = 0;
             dvel[i] = 0;
+            gradp_acc[i] = 0;
+            forcing_acc[i] = 0;
             for(int j=0;j<3;j++){
                 sigma[i][j] = 0;
+                sigma_p[i][j] = 0;
+                sigma_e[i][j] = 0;
+                sigma_sv[i][j] = 0;
                 fvel[i][j] = 0;
                 fvel[i+3][j] = 0;
                 nv_der[i][j] = 0;
@@ -79,8 +90,13 @@ struct field {
         for (int i=0;i<3;i++){
             vel[i] = 0;
             dvel[i] = 0;
+            gradp_acc[i] = 0;
+            forcing_acc[i] = 0;
             for(int j=0;j<3;j++){
                 sigma[i][j] = 0;
+                sigma_p[i][j] = 0;
+                sigma_e[i][j] = 0;
+                sigma_sv[i][j] = 0;
                 fvel[i][j] = 0;
                 fvel[i+3][j] = 0;
                 nv_der[i][j] = 0;
