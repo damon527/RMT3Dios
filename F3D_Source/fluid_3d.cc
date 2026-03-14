@@ -1130,7 +1130,6 @@ void fluid_3d::compute_tang_derivatives(bool verbose){
  */
 void fluid_3d::acceleration(int ijk,double myx,double myy, double myz,double (&acc)[3],bool pres,bool gdn_ex, bool verbose){
 	field *fp = u0+ijk;
-	int eid = ijk + G0;
 	// compute acceleration due to stress imbalance.
 	acc[0] += dxsp*(fp[1].sigma[0][0] - fp->sigma[0][0])
 				+ dysp*(fp[sm4].sigma[1][0] -fp->sigma[1][0])
@@ -1595,35 +1594,11 @@ void fluid_3d::compute_stress(bool verbose){
 		}
 	}
 
-    if(spars->out_flag & ((1ULL<<22)|(1ULL<<23)|(1ULL<<24)|(1ULL<<25)|(1ULL<<26)|(1ULL<<27)|(1ULL<<28)|(1ULL<<29)|(1ULL<<30))) {
-        fill_particle_acceleration_fields(verbose);
-    }
-    if(spars->out_flag & ((1ULL<<31)|(1ULL<<32)|(1ULL<<33)|(1ULL<<34)|(1ULL<<35)|(1ULL<<36))) {
-        fill_khm_auxiliary_fields(verbose);
-    }
+    
     watch.toc(3);
 }
 
-void fluid_3d::fill_particle_acceleration_fields(bool verbose) {
-    const double rho0inv = 1.0/mgmt->fm.rho;
-    for(int k=-1;k<=so+1;k++) for(int j=-1;j<=sn+1;j++) for(int i=-1;i<=sm+1;i++) {
-        const int eid = index(i,j,k);
-        field *fp = u0 + eid;
-        field *xp = fp + 1;
-        field *yp = fp + sm4;
-        field *zp = fp + smn4;
-        for(int c=0;c<3;c++) {
-            fp->sigma_e[0][c] = rho0inv*(dxsp*(xp->sigma_e[0][c] - fp->sigma_e[0][c])
-                                      + dysp*(yp->sigma_e[1][c] - fp->sigma_e[1][c])
-                                      + dzsp*(zp->sigma_e[2][c] - fp->sigma_e[2][c]));
-            fp->sigma_sv[0][c] = rho0inv*(dxsp*(xp->sigma_sv[0][c] - fp->sigma_sv[0][c])
-                                       + dysp*(yp->sigma_sv[1][c] - fp->sigma_sv[1][c])
-                                       + dzsp*(zp->sigma_sv[2][c] - fp->sigma_sv[2][c]));
-            fp->sigma_p[0][c] = fp->sigma_e[0][c] + fp->sigma_sv[0][c];
-        }
-    }
-    report_particle_accel_consistency(verbose);
-}
+
 
 void fluid_3d::forcing_acceleration(int ijk,double myx,double myy,double myz,double (&facc)[3]) {
     int eid = ijk + G0;
@@ -1650,46 +1625,7 @@ void fluid_3d::forcing_acceleration(int ijk,double myx,double myy,double myz,dou
     }
 }
 
-void fluid_3d::fill_khm_auxiliary_fields(bool verbose) {
-    (void)verbose;
-    const double rho0inv = 1.0/mgmt->fm.rho;
-    for(int k=0;k<so;k++) for(int j=0;j<sn;j++) for(int i=0;i<sm;i++) {
-        const int ijk = index(i,j,k);
-        field *fp = u0 + ijk;
-        double gp[3] = {0,0,0};
-        neg_pres_grad(fp,gp);
-        for(int c=0;c<3;c++) fp->gradp_acc[c] = rho0inv*gp[c];
 
-        double frc[3] = {0,0,0};
-        forcing_acceleration(ijk,lx0[i],ly0[j],lz0[k],frc);
-        for(int c=0;c<3;c++) fp->forcing_acc[c] = frc[c];
-    }
-}
-
-void fluid_3d::report_particle_accel_consistency(bool verbose) {
-    const bool do_report = (spars->dump_code & 16) || verbose;
-    if(!do_report) return;
-
-    double l2_local=0, l2ref_local=0, max_local=0;
-    for(int k=0;k<so;k++) for(int j=0;j<sn;j++) for(int i=0;i<sm;i++) {
-        const field &f = u0[index(i,j,k)];
-        for(int c=0;c<3;c++) {
-            const double diff = f.sigma_p[0][c] - (f.sigma_e[0][c] + f.sigma_sv[0][c]);
-            l2_local += diff*diff;
-            l2ref_local += f.sigma_p[0][c]*f.sigma_p[0][c];
-            max_local = std::max(max_local, fabs(diff));
-        }
-    }
-    double l2_global=0, l2ref_global=0, max_global=0;
-    MPI_Allreduce(&l2_local,&l2_global,1,MPI_DOUBLE,MPI_SUM,grid->cart);
-    MPI_Allreduce(&l2ref_local,&l2ref_global,1,MPI_DOUBLE,MPI_SUM,grid->cart);
-    MPI_Allreduce(&max_local,&max_global,1,MPI_DOUBLE,MPI_MAX,grid->cart);
-
-    if(rank==0) {
-        const double rel_l2 = (l2ref_global>0)?sqrt(l2_global/l2ref_global):sqrt(l2_global);
-        printf("# particle accel decomposition check: relL2=%g max=%g\n", rel_l2, max_global);
-    }
-}
 
 /** Routine to compute collision stress.
  * only on the lower faces. */

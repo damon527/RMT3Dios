@@ -338,10 +338,7 @@ class fluid_3d {
                       bool include_active=true);
 	template<lower_faces F>
 	void fluid_stress(int eid, double (&fluid_s)[3]);
-	 void fill_particle_acceleration_fields(bool verbose);
-    void fill_khm_auxiliary_fields(bool verbose);
-    void report_particle_accel_consistency(bool verbose);
-    void forcing_acceleration(int ijk,double myx,double myy,double myz,double (&facc)[3]);
+        void forcing_acceleration(int ijk,double myx,double myy,double myz,double (&facc)[3]);
 	void velocity_grad(lower_faces F,int eid,matrix &grad_v);
 
 	void compute_stress(bool verbose);

@@ -290,6 +290,8 @@ void fluid_3d::slice(write_params wp, double *g_val) {
 int fluid_3d::copy_slice_to_buf(write_params wp,int point) {
 	int &dim = wp.dim;
 
+
+ 
 	//printf("I'm processor %d, (%d, %d, %d), slicing at %d, point %d\n", rank, ai, aj, ak, dim, point);
 	if(point<0 || (dim==0 && point>=sm) || (dim==1&&point>=sn) || (dim==2 && point>=so)){
 		printf("copy_slice_to_buf(): Error! Index out of bound. Nothing has been done.\n");
@@ -372,16 +374,31 @@ int fluid_3d::copy_slice_to_buf(write_params wp,int point) {
 #else
             *b = 100.;
 #endif
-         } else if (wp.o_type >= 22 && wp.o_type <= 24) {
-            *b = u0[eid].sigma_p[0][wp.o_type-22];
-        } else if (wp.o_type >= 25 && wp.o_type <= 27) {
-            *b = u0[eid].sigma_e[0][wp.o_type-25];
-        } else if (wp.o_type >= 28 && wp.o_type <= 30) {
-            *b = u0[eid].sigma_sv[0][wp.o_type-28];
+ } else if (wp.o_type >= 22 && wp.o_type <= 30) {
+            const double rho0inv = 1.0/mgmt->fm.rho;
+            field *fp = u0 + eid;
+            field *xp = fp + 1;
+            field *yp = fp + sm4;
+            field *zp = fp + smn4;
+            const int c = (wp.o_type-22)%3;
+            const double ae = rho0inv*(dxsp*(xp->sigma_e[0][c] - fp->sigma_e[0][c])
+                                     + dysp*(yp->sigma_e[1][c] - fp->sigma_e[1][c])
+                                     + dzsp*(zp->sigma_e[2][c] - fp->sigma_e[2][c]));
+            const double asv = rho0inv*(dxsp*(xp->sigma_sv[0][c] - fp->sigma_sv[0][c])
+                                      + dysp*(yp->sigma_sv[1][c] - fp->sigma_sv[1][c])
+                                      + dzsp*(zp->sigma_sv[2][c] - fp->sigma_sv[2][c]));
+            if(wp.o_type<=24) *b = ae + asv;
+            else if(wp.o_type<=27) *b = ae;
+            else *b = asv;
         } else if (wp.o_type >= 31 && wp.o_type <= 33) {
-            *b = u0[eid].gradp_acc[wp.o_type-31];
+            const double rho0inv = 1.0/mgmt->fm.rho;
+            double gp[3] = {0,0,0};
+            neg_pres_grad(u0+eid,gp);
+            *b = rho0inv*gp[wp.o_type-31];
         } else if (wp.o_type >= 34 && wp.o_type <= 36) {
-            *b = u0[eid].forcing_acc[wp.o_type-34];
+            double frc[3] = {0,0,0};
+            forcing_acceleration(eid,lx0[i],ly0[j],lz0[k],frc);
+            *b = frc[wp.o_type-34];
         } else {
 			if(wp.obj_id==-1) {
 				obj_id=min_phi_id(eid);

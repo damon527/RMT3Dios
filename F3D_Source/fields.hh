@@ -57,6 +57,10 @@ struct field {
 	double sigma_p[3][3];
 	double sigma_e[3][3];
 	double sigma_sv[3][3];
+	/** cell-centered divergence of particle stress components for output */
+	double part_acc[3];
+	double part_acc_e[3];
+	double part_acc_sv[3];
 	/** KHM auxiliary Eulerian acceleration fields at cell center */
 	double gradp_acc[3];
 	double forcing_acc[3];
@@ -66,6 +70,9 @@ struct field {
         for (int i=0;i<3;i++){
             vel[i] = 0;
             dvel[i] = 0;
+            part_acc[i] = 0;
+            part_acc_e[i] = 0;
+            part_acc_sv[i] = 0;
             gradp_acc[i] = 0;
             forcing_acc[i] = 0;
             for(int j=0;j<3;j++){
@@ -90,6 +97,9 @@ struct field {
         for (int i=0;i<3;i++){
             vel[i] = 0;
             dvel[i] = 0;
+            part_acc[i] = 0;
+            part_acc_e[i] = 0;
+            part_acc_sv[i] = 0;
             gradp_acc[i] = 0;
             forcing_acc[i] = 0;
             for(int j=0;j<3;j++){
